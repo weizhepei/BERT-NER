@@ -28,23 +28,21 @@ This repo was tested on Python 3.6+ and PyTorch 1.0.1. The requirements are:
      - Download the Google's BERT pretrained models for Chinese  **[(`BERT-Base, Chinese`)](https://storage.googleapis.com/bert_models/2018_11_03/chinese_L-12_H-768_A-12.zip)** and English **[(`BERT-Base, Cased`)](https://storage.googleapis.com/bert_models/2018_10_18/cased_L-12_H-768_A-12.zip)**. Then decompress them under `pretrained_bert_models/bert-chinese-cased/` and `pretrained_bert_models/bert-base-cased/` respectively. More pre-trained models are available [here](https://github.com/google-research/bert#pre-trained-models).
 
      - Execute the following command,  convert the TensorFlow checkpoint to a PyTorch dump as huggingface [suggests](https://huggingface.co/pytorch-transformers/converting_tensorflow_models.html). Here is an example of the conversion process for a pretrained `BERT-Base Cased` model.
-               
-   ```shell
-    export TF_BERT_MODEL_DIR=/full/path/to/cased_L-12_H-768_A-12
+       ```shell
+       export TF_BERT_MODEL_DIR=/full/path/to/cased_L-12_H-768_A-12
        export PT_BERT_MODEL_DIR=/full/path/to/pretrained_bert_models/bert-base-cased
     
        pytorch_transformers bert \
        	$TF_BERT_MODEL_DIR/bert_model.ckpt \
-    	$TF_BERT_MODEL_DIR/bert_config.json \
+    	   $TF_BERT_MODEL_DIR/bert_config.json \
        	$PT_BERT_MODEL_DIR/pytorch_model.bin
        ```
    
      - Copy the BERT parameters file `bert_config.json` and dictionary file `vocab.txt` to the directory `$PT_BERT_MODEL_DIR`.
-   
        ```
        cp $TF_BERT_MODEL_DIR/bert_config.json $PT_BERT_MODEL_DIR/config.json
        cp $TF_BERT_MODEL_DIR/vocab.txt $PT_BERT_MODEL_DIR/vocab.txt
-    ```
+       ```
    
 2. **Build dataset and tags**
 
