@@ -33,7 +33,7 @@ This repo was tested on Python 3.6+ and PyTorch 1.0.1. The requirements are:
        export PT_BERT_MODEL_DIR=/full/path/to/pretrained_bert_models/bert-base-cased
     
        pytorch_transformers bert \
-       	$TF_BERT_MODEL_DIR/bert_model.ckpt \
+         $TF_BERT_MODEL_DIR/bert_model.ckpt \
          $TF_BERT_MODEL_DIR/bert_config.json \
          $PT_BERT_MODEL_DIR/pytorch_model.bin
        ```
