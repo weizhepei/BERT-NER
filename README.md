@@ -4,8 +4,8 @@
 
 ## Dataset
 
-- Chinese: [MSRA](https://github.com/lemonhu/NER-BERT-pytorch/tree/master/data/msra), which is [reported](https://github.com/lemonhu/NER-BERT-pytorch/issues/9) to be incomplete. A complete version can be found [here](https://github.com/buppt/ChineseNER/tree/master/data/MSRA).
-- English: [CONLL-2003](https://github.com/kyzhouhzau/BERT-NER/tree/master/data)
+- Chinese: [MSRA](http://sighan.cs.uchicago.edu/bakeoff2006/), which is [reported](https://github.com/lemonhu/NER-BERT-pytorch/issues/9) to be incomplete. A complete version can be found [here](https://github.com/buppt/ChineseNER/tree/master/data/MSRA).
+- English: [CONLL-2003](https://www.clips.uantwerpen.be/conll2003/ner/)
 
 ## Requirements
 
