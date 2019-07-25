@@ -87,7 +87,7 @@ if __name__ == '__main__':
         val = load_dataset(path_val)
     else:
         total_train_len = len(train)
-        split_val_len = int(total_train_len * 0.0667)
+        split_val_len = int(total_train_len * 0.05)
         order = list(range(total_train_len))
         random.seed(2019)
         random.shuffle(order)

@@ -21,8 +21,8 @@ class BertForSequenceTagging(BertPreTrainedModel):
 		outputs = self.bert(input_ids, position_ids=position_ids, token_type_ids=token_type_ids,
 							attention_mask=attention_mask, head_mask=head_mask)
 		sequence_output = outputs[0]
-#		print("sequence_output", sequence_output.shape) # [30,60,768]
-		# obtain original token representations from sub_words representations (by selecting the first the sub_word)
+#		print("sequence_output", sequence_output.shape)
+		# obtain original token representations from sub_words representations (by selecting the first sub_word)
 		origin_sequence_output = [
 			layer[starts.nonzero().squeeze(1)]
 			for layer, starts in zip(sequence_output, input_token_starts)]
@@ -35,9 +35,6 @@ class BertForSequenceTagging(BertPreTrainedModel):
 		outputs = (logits,)
 		if labels is not None:
 			loss_mask = labels.gt(-1)
-			#print(labels[0], labels[0].shape)
-			#print(loss_mask[0], loss_mask[0].shape)
-			#print(logits[0], logits[0].shape)
 			loss_fct = CrossEntropyLoss()
 			# Only keep active parts of the loss
 			if loss_mask is not None:
@@ -49,4 +46,4 @@ class BertForSequenceTagging(BertPreTrainedModel):
 				loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 			outputs = (loss,) + outputs
 
-		return outputs  # (loss), scores, (hidden_states), (attentions)
+		return outputs  # (loss), scores

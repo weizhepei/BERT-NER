@@ -42,26 +42,7 @@ class DataLoader(object):
         """
         sentences = []
         tags = []
-        
-        #with open(sentences_file, 'r') as f1, open(tags_file, 'r') as f2:
-        #    sentence_lines = f1.readlines()
-        #    labels_lines = f2.readlines()
-        #    for i in range(len(labels_lines)):
-        #        tokens = []
-        #        labels = []
-        #        words_list = sentence_lines[i].strip().split(' ')
-        #        labels_list = labels_lines[i].strip().split(' ')
-        #        for _, (word, label) in enumerate(zip(words_list, labels_list)):
-        #            sub_words = self.tokenizer.tokenize(word)
-        #            tokens.extend(sub_words)
-        #            for idx, _ in enumerate(sub_words):
-        #                if idx == 0:
-        #                    labels.append(label)
-        #                else:
-        #                    labels.append('X')
-        #        sentences.append(self.tokenizer.convert_tokens_to_ids(tokens))
-        #        tags.append([self.tag2idx.get(tag) for tag in labels])
-            
+                    
         with open(sentences_file, 'r') as file:
             for line in file:
                 # replace each token by its index
@@ -152,13 +133,13 @@ class DataLoader(object):
                     batch_data[j] = sentences[j][0][:max_subwords_len]
                 token_start_idx = sentences[j][-1]
                 token_starts = np.zeros(max_subwords_len)
-                token_starts[[idx for idx in token_start_idx if idx < max_subwords_len]] = 1  #此处idx可能超过最大长度，要做条件判断，tag的最大size与该max_subwords_len的保持一致
+                token_starts[[idx for idx in token_start_idx if idx < max_subwords_len]] = 1
                 batch_token_starts.append(token_starts)
                 max_token_len = max(int(sum(token_starts)), max_token_len)
             
             batch_tags = self.tag_pad_idx * np.ones((batch_len, max_token_len))
             for j in range(batch_len):
-                cur_tags_len = len(tags[j])  # tag中非-1值的个数要与token_starts中1的数量保持一致，这个数量小于等于max_subwords_len
+                cur_tags_len = len(tags[j])  
                 if cur_tags_len <= max_token_len:
                     batch_tags[j][:cur_tags_len] = tags[j]
                 else:
