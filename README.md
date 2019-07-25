@@ -34,8 +34,8 @@ This repo was tested on Python 3.6+ and PyTorch 1.0.1. The requirements are:
     
        pytorch_transformers bert \
        	$TF_BERT_MODEL_DIR/bert_model.ckpt \
-    	   $TF_BERT_MODEL_DIR/bert_config.json \
-       	$PT_BERT_MODEL_DIR/pytorch_model.bin
+         $TF_BERT_MODEL_DIR/bert_config.json \
+         $PT_BERT_MODEL_DIR/pytorch_model.bin
        ```
    
      - Copy the BERT parameters file `bert_config.json` and dictionary file `vocab.txt` to the directory `$PT_BERT_MODEL_DIR`.
