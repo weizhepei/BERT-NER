@@ -58,7 +58,7 @@ This repo was tested on Python 3.6+ and PyTorch 1.0.1. The requirements are:
    python build_dataset_tags.py --dataset=msra
    ```
 
-   It will extract the sentences and tags from `train_bio`, `test_bio` and `val_bio`(if provided, otherwise randomly sample 5% data from the `train_bio`). Then split them into train/val/test and save them in a convenient format for our model, and create a file `tags.txt` containing a collection of tags.
+   It will extract the sentences and tags from `train_bio`, `test_bio` and `val_bio`(if not provided, it will randomly sample 5% data from the `train_bio` to create `val_bio`). Then split them into train/val/test and save them in a convenient format for our model, and create a file `tags.txt` containing a collection of tags.
 
 3. **Set experimental hyperparameters**
 
