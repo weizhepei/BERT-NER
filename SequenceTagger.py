@@ -1,5 +1,7 @@
-from pytorch_transformers.modeling_bert import *
+from transformers.modeling_bert import *
 from torch.nn.utils.rnn import pad_sequence
+
+
 class BertForSequenceTagging(BertPreTrainedModel):
 	def __init__(self, config):
 		super(BertForSequenceTagging, self).__init__(config)
@@ -9,27 +11,34 @@ class BertForSequenceTagging(BertPreTrainedModel):
 		self.dropout = nn.Dropout(config.hidden_dropout_prob)
 		self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
-		self.apply(self.init_weights)
+		self.init_weights()
 
 	def forward(self, input_data, token_type_ids=None, attention_mask=None, labels=None,
-				position_ids=None, head_mask=None):
+				position_ids=None, inputs_embeds=None, head_mask=None):
 		input_ids, input_token_starts = input_data
-#		print("input_ids", input_ids.shape)
-#		print("input_token_starts", input_token_starts.shape)
-#		print("attention_mask", attention_mask.shape)
-#		print("labels", labels.shape)
-		outputs = self.bert(input_ids, position_ids=position_ids, token_type_ids=token_type_ids,
-							attention_mask=attention_mask, head_mask=head_mask)
+		#print("input_ids", input_ids.shape)
+		#print("input_token_starts", input_token_starts.shape)
+		#print("attention_mask", attention_mask.shape)
+		#print("labels", labels.shape)
+		outputs = self.bert(input_ids,
+							attention_mask=attention_mask,
+							token_type_ids=token_type_ids,
+							position_ids=position_ids,
+							head_mask=head_mask,
+							inputs_embeds=inputs_embeds)
 		sequence_output = outputs[0]
-#		print("sequence_output", sequence_output.shape)
+		#print("sequence_output", sequence_output.shape)
+
+		#### 'X' label Issue Start ####
 		# obtain original token representations from sub_words representations (by selecting the first sub_word)
 		origin_sequence_output = [
 			layer[starts.nonzero().squeeze(1)]
 			for layer, starts in zip(sequence_output, input_token_starts)]
-		
 		padded_sequence_output = pad_sequence(origin_sequence_output, batch_first=True)
-#		print("padded_sequence_output", padded_sequence_output.shape)
+		#print("padded_sequence_output", padded_sequence_output.shape)
 		padded_sequence_output = self.dropout(padded_sequence_output)
+		#### 'X' label Issue End ####
+
 		logits = self.classifier(padded_sequence_output)
 
 		outputs = (logits,)

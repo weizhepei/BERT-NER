@@ -1,26 +1,21 @@
 """Evaluate the model"""
-
-import argparse
+import os
+import torch
+import utils
 import random
 import logging
-import os
-
+import argparse
 import numpy as np
-import torch
-
-from SequenceTagger import BertForSequenceTagging, BertConfig
-
-from metrics import f1_score
-from metrics import classification_report
-
 from data_loader import DataLoader
-import utils
+from SequenceTagger import BertForSequenceTagging
+from metrics import f1_score, get_entities, classification_report
+
+
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', default='conll', help="Directory containing the dataset")
 parser.add_argument('--seed', type=int, default=23, help="random seed for initialization")
-parser.add_argument('--multi_gpu', default=False, action='store_true', help="Whether to use multiple GPUs if available")
-parser.add_argument('--fp16', default=False, action='store_true', help="Whether to use 16-bit float precision instead of 32-bit")
 
 
 def evaluate(model, data_iterator, params, mark='Eval', verbose=False):
@@ -42,8 +37,6 @@ def evaluate(model, data_iterator, params, mark='Eval', verbose=False):
         batch_masks = batch_data.gt(0)
         
         loss = model((batch_data, batch_token_starts), token_type_ids=None, attention_mask=batch_masks, labels=batch_tags)[0]
-        if params.n_gpu > 1 and params.multi_gpu:
-            loss = loss.mean()
         loss_avg.update(loss.item())
         
         batch_output = model((batch_data, batch_token_starts), token_type_ids=None, attention_mask=batch_masks)[0]  # shape: (batch_size, max_len, num_labels)
@@ -69,6 +62,30 @@ def evaluate(model, data_iterator, params, mark='Eval', verbose=False):
         logging.info(report)
     return metrics
 
+def interAct(model, data_iterator, params, mark='Interactive', verbose=False):
+    """Evaluate the model on `steps` batches."""
+    # set model to evaluation mode
+    model.eval()
+
+    idx2tag = params.idx2tag
+
+    true_tags = []
+    pred_tags = []
+
+    # a running average object for loss
+    loss_avg = utils.RunningAverage()
+
+
+    batch_data, batch_token_starts = next(data_iterator)
+    batch_masks = batch_data.gt(0)
+        
+    batch_output = model((batch_data, batch_token_starts), token_type_ids=None, attention_mask=batch_masks)[0]  # shape: (batch_size, max_len, num_labels)
+        
+    batch_output = batch_output.detach().cpu().numpy()
+
+    pred_tags.extend([[idx2tag.get(idx) for idx in indices] for indices in np.argmax(batch_output, axis=2)])
+    
+    return(get_entities(pred_tags))
 
 if __name__ == '__main__':
     args = parser.parse_args()
@@ -81,14 +98,10 @@ if __name__ == '__main__':
 
     # Use GPUs if available
     params.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    params.n_gpu = torch.cuda.device_count()
-    params.multi_gpu = args.multi_gpu
 
     # Set the random seed for reproducible experiments
     random.seed(args.seed)
     torch.manual_seed(args.seed)
-    if params.n_gpu > 0:
-        torch.cuda.manual_seed_all(args.seed)  # set random seed for all GPUs
     params.seed = args.seed
 
     # Set the logger
@@ -99,13 +112,19 @@ if __name__ == '__main__':
 
     # Initialize the DataLoader
     data_dir = 'data/' + args.dataset
+
     if args.dataset in ["conll"]:
-        bert_model_dir = 'pretrained_bert_models/bert-base-cased/'
+        bert_class = 'bert-base-cased' # auto
+        # bert_class = 'pretrained_bert_models/bert-base-cased/' # manual
     elif args.dataset in ["msra"]:
-        bert_model_dir = 'pretrained_bert_models/bert-base-chinese/'
+        bert_class = 'bert-base-chinese' # auto
+        # bert_class = 'pretrained_bert_models/bert-base-chinese/' # manual
 
-    data_loader = DataLoader(data_dir, bert_model_dir, params, token_pad_idx=0, tag_pad_idx=-1)
+    data_loader = DataLoader(data_dir, bert_class, params, token_pad_idx=0, tag_pad_idx=-1)
 
+    # Load the model
+    model = BertForSequenceTagging.from_pretrained(tagger_model_dir)
+    model.to(params.device)
 
     # Load data
     test_data = data_loader.load_data('test')
@@ -116,19 +135,6 @@ if __name__ == '__main__':
     test_data_iterator = data_loader.data_iterator(test_data, shuffle=False)
 
     logging.info("- done.")
-
-    # Define the model
-    # config_path = os.path.join(args.bert_model_dir, 'config.json')
-    # config = BertConfig.from_json_file(config_path)
-    ## model = BertForTokenClassification(config, num_labels=len(params.tag2idx))
-    # model = BertForSequenceTagging(config)
-    model = BertForSequenceTagging.from_pretrained(tagger_model_dir)
-    model.to(params.device)
-    
-    if args.fp16:
-        model.half()
-    if params.n_gpu > 1 and args.multi_gpu:
-        model = torch.nn.DataParallel(model)
 
     logging.info("Starting evaluation...")
     test_metrics = evaluate(model, test_data_iterator, params, mark='Test', verbose=True)

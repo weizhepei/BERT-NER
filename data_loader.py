@@ -1,17 +1,13 @@
 """Data loader"""
-
+import os
+import torch
+import utils
 import random
 import numpy as np
-import os
-import sys
-
-import torch
-
-from pytorch_transformers import BertTokenizer
-import utils
+from transformers import BertTokenizer
 
 class DataLoader(object):
-    def __init__(self, data_dir, bert_model_dir, params, token_pad_idx=0, tag_pad_idx=-1):
+    def __init__(self, data_dir, bert_class, params, token_pad_idx=0, tag_pad_idx=-1):
         self.data_dir = data_dir
         self.batch_size = params.batch_size
         self.max_len = params.max_len
@@ -26,7 +22,8 @@ class DataLoader(object):
         params.tag2idx = self.tag2idx
         params.idx2tag = self.idx2tag
 
-        self.tokenizer = BertTokenizer.from_pretrained(bert_model_dir, do_lower_case=True)
+        self.tokenizer = BertTokenizer.from_pretrained(bert_class, do_lower_case=False)
+
 
     def load_tags(self):
         tags = []
@@ -52,21 +49,22 @@ class DataLoader(object):
                 subwords = ['CLS'] + [item for indices in subwords for item in indices]
                 token_start_idxs = 1 + np.cumsum([0] + subword_lengths[:-1])
                 sentences.append((self.tokenizer.convert_tokens_to_ids(subwords),token_start_idxs))
-        
-        with open(tags_file, 'r') as file:
-            for line in file:
-                # replace each tag by its index
-                tag_seq = [self.tag2idx.get(tag) for tag in line.strip().split(' ')]
-                tags.append(tag_seq)
+        if tags_file != None:
+            with open(tags_file, 'r') as file:
+                for line in file:
+                    # replace each tag by its index
+                    tag_seq = [self.tag2idx.get(tag) for tag in line.strip().split(' ')]
+                    tags.append(tag_seq)
 
-        # checks to ensure there is a tag for each token
-        assert len(sentences) == len(tags)
-        for i in range(len(sentences)):
-            assert len(tags[i]) == len(sentences[i][-1])
+            # checks to ensure there is a tag for each token
+            assert len(sentences) == len(tags)
+            for i in range(len(sentences)):
+                assert len(tags[i]) == len(sentences[i][-1])
+
+            d['tags'] = tags
 
         # storing sentences and tags in dict d
         d['data'] = sentences
-        d['tags'] = tags
         d['size'] = len(sentences)
 
     def load_data(self, data_type):
@@ -80,9 +78,13 @@ class DataLoader(object):
         data = {}
         
         if data_type in ['train', 'val', 'test']:
+            print('Loading ' + data_type)
             sentences_file = os.path.join(self.data_dir, data_type, 'sentences.txt')
             tags_path = os.path.join(self.data_dir, data_type, 'tags.txt')
             self.load_sentences_tags(sentences_file, tags_path, data)
+        elif data_type == 'interactive':
+            sentences_file = os.path.join(self.data_dir, data_type, 'sentences.txt')
+            self.load_sentences_tags(sentences_file, tags_file=None, d=data)   
         else:
             raise ValueError("data type not in ['train', 'val', 'test']")
         return data
@@ -104,12 +106,26 @@ class DataLoader(object):
         if shuffle:
             random.seed(self.seed)
             random.shuffle(order)
+        
+        interMode = False if 'tags' in data else True
+
+        if data['size'] % self.batch_size == 0:
+            BATCH_NUM = data['size']//self.batch_size
+        else:
+            BATCH_NUM = data['size']//self.batch_size + 1
+
 
         # one pass over data
-        for i in range(data['size']//self.batch_size):
+        for i in range(BATCH_NUM):
             # fetch sentences and tags
-            sentences = [data['data'][idx] for idx in order[i*self.batch_size:(i+1)*self.batch_size]]
-            tags = [data['tags'][idx] for idx in order[i*self.batch_size:(i+1)*self.batch_size]]
+            if i * self.batch_size < data['size'] < (i+1) * self.batch_size:
+                sentences = [data['data'][idx] for idx in order[i*self.batch_size:]]
+                if not interMode:
+                    tags = [data['tags'][idx] for idx in order[i*self.batch_size:]]
+            else:
+                sentences = [data['data'][idx] for idx in order[i*self.batch_size:(i+1)*self.batch_size]]
+                if not interMode:
+                    tags = [data['tags'][idx] for idx in order[i*self.batch_size:(i+1)*self.batch_size]]
 
             # batch length
             batch_len = len(sentences)
@@ -137,21 +153,25 @@ class DataLoader(object):
                 batch_token_starts.append(token_starts)
                 max_token_len = max(int(sum(token_starts)), max_token_len)
             
-            batch_tags = self.tag_pad_idx * np.ones((batch_len, max_token_len))
-            for j in range(batch_len):
-                cur_tags_len = len(tags[j])  
-                if cur_tags_len <= max_token_len:
-                    batch_tags[j][:cur_tags_len] = tags[j]
-                else:
-                    batch_tags[j] = tags[j][:max_token_len]
+            if not interMode:
+                batch_tags = self.tag_pad_idx * np.ones((batch_len, max_token_len))
+                for j in range(batch_len):
+                    cur_tags_len = len(tags[j])  
+                    if cur_tags_len <= max_token_len:
+                        batch_tags[j][:cur_tags_len] = tags[j]
+                    else:
+                        batch_tags[j] = tags[j][:max_token_len]
             
             # since all data are indices, we convert them to torch LongTensors
             batch_data = torch.tensor(batch_data, dtype=torch.long)
             batch_token_starts = torch.tensor(batch_token_starts, dtype=torch.long)
-            batch_tags = torch.tensor(batch_tags, dtype=torch.long)
+            if not interMode:
+                batch_tags = torch.tensor(batch_tags, dtype=torch.long)
 
             # shift tensors to GPU if available
-            batch_data, batch_token_starts, batch_tags = batch_data.to(self.device), batch_token_starts.to(self.device), batch_tags.to(self.device)
-    
-            yield batch_data, batch_token_starts, batch_tags
-
+            batch_data, batch_token_starts = batch_data.to(self.device), batch_token_starts.to(self.device)
+            if not interMode:
+                batch_tags = batch_tags.to(self.device)
+                yield batch_data, batch_token_starts, batch_tags
+            else:
+                yield batch_data, batch_token_starts

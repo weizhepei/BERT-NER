@@ -1,21 +1,19 @@
 """Train and evaluate the model"""
-
-import argparse
+import os
+import torch
+import utils
 import random
 import logging
-import os
-
-import torch
-from torch.optim import Adam
+import argparse
 import torch.nn as nn
-from torch.optim.lr_scheduler import LambdaLR
-from pytorch_transformers.optimization import WarmupLinearSchedule, AdamW
 from tqdm import trange
-
-from SequenceTagger import BertForSequenceTagging
-from data_loader import DataLoader
 from evaluate import evaluate
-import utils
+from data_loader import DataLoader
+from SequenceTagger import BertForSequenceTagging
+from transformers.optimization import get_linear_schedule_with_warmup, AdamW
+
+
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 
 parser = argparse.ArgumentParser()
@@ -23,19 +21,12 @@ parser.add_argument('--dataset', default='conll', help="Directory containing the
 parser.add_argument('--seed', type=int, default=2019, help="random seed for initialization")
 parser.add_argument('--restore_dir', default=None,
                     help="Optional, name of the directory containing weights to reload before training, e.g., 'experiments/conll/'")
-parser.add_argument('--multi_gpu', default=False, action='store_true', help="Whether to use multiple GPUs if available")
-parser.add_argument('--fp16', default=False, action='store_true', help="Whether to use 16-bit float precision instead of 32-bit")
-parser.add_argument('--loss_scale', type=float, default=0,
-                        help="Loss scaling to improve fp16 numeric stability. Only used when fp16 set to True.\n"
-                             "0 (default value): dynamic loss scaling.\n"
-                             "Positive power of 2: static loss scaling value.\n")
 
 
-def train(model, data_iterator, optimizer, scheduler, params):
+def train_epoch(model, data_iterator, optimizer, scheduler, params):
     """Train the model on `steps` batches"""
     # set model to training mode
     model.train()
-    # scheduler.step()
 
     # a running average object for loss
     loss_avg = utils.RunningAverage()
@@ -50,23 +41,16 @@ def train(model, data_iterator, optimizer, scheduler, params):
         # compute model output and loss
         loss = model((batch_data, batch_token_starts), token_type_ids=None, attention_mask=batch_masks, labels=batch_tags)[0]
 
-        if params.n_gpu > 1 and args.multi_gpu:
-            loss = loss.mean()  # mean() to average on multi-gpu
-
         # clear previous gradients, compute gradients of all variables wrt loss
         model.zero_grad()
-        
-        if args.fp16:
-            optimizer.backward(loss)
-        else:
-            loss.backward()
+        loss.backward()
 
         # gradient clipping
         nn.utils.clip_grad_norm_(parameters=model.parameters(), max_norm=params.clip_grad)
 
         # performs updates using calculated gradients
-        scheduler.step()
         optimizer.step()
+        scheduler.step()
 
         # update the average loss
         loss_avg.update(loss.item())
@@ -94,21 +78,21 @@ def train_and_evaluate(model, train_data, val_data, optimizer, scheduler, params
         train_data_iterator = data_loader.data_iterator(train_data, shuffle=True)
 
         # Train for one epoch on training set
-        train(model, train_data_iterator, optimizer, scheduler, params)
+        train_epoch(model, train_data_iterator, optimizer, scheduler, params)
 
         # data iterator for evaluation
-        train_data_iterator = data_loader.data_iterator(train_data, shuffle=False)
+        # train_data_iterator = data_loader.data_iterator(train_data, shuffle=False)
         val_data_iterator = data_loader.data_iterator(val_data, shuffle=False)
 
         # Evaluate for one epoch on training set and validation set
         # params.eval_steps = params.train_steps
-        # train_metrics = evaluate(model, train_data_iterator, params, mark='Train')
+        # train_metrics = evaluate(model, train_data_iterator, params, mark='Train') # callback train f1
         params.eval_steps = params.val_steps
         val_metrics = evaluate(model, val_data_iterator, params, mark='Val')
         
         val_f1 = val_metrics['f1']
         improve_f1 = val_f1 - best_val_f1
-        if improve_f1 > 0:    
+        if improve_f1 > 1e-5:    
             logging.info("- Found new best F1")
             best_val_f1 = val_f1
             model.save_pretrained(model_dir)
@@ -128,6 +112,7 @@ def train_and_evaluate(model, train_data, val_data, optimizer, scheduler, params
 if __name__ == '__main__':
     args = parser.parse_args()
     tagger_model_dir = 'experiments/' + args.dataset
+
     # Load the parameters from json file
     json_path = os.path.join(tagger_model_dir, 'params.json')
     assert os.path.isfile(json_path), "No json configuration file found at {}".format(json_path)
@@ -135,32 +120,33 @@ if __name__ == '__main__':
 
     # Use GPUs if available
     params.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    params.n_gpu = torch.cuda.device_count()
-    params.multi_gpu = args.multi_gpu
 
     # Set the random seed for reproducible experiments
     random.seed(args.seed)
     torch.manual_seed(args.seed)
-    if params.n_gpu > 0:
-        torch.cuda.manual_seed_all(args.seed)  # set random seed for all GPUs
+
     params.seed = args.seed
     
     # Set the logger
     utils.set_logger(os.path.join(tagger_model_dir, 'train.log'))
-    logging.info("device: {}, n_gpu: {}, 16-bits training: {}".format(params.device, params.n_gpu, args.fp16))
+    logging.info("device: {}".format(params.device))
 
     # Create the input data pipeline
-    logging.info("Loading the datasets...")
     
     # Initialize the DataLoader
     data_dir = 'data/' + args.dataset
-    if args.dataset in ["conll"]:
-        bert_model_dir = 'pretrained_bert_models/bert-base-cased/'
-    elif args.dataset in ["msra"]:
-        bert_model_dir = 'pretrained_bert_models/bert-base-chinese/'
 
-    data_loader = DataLoader(data_dir, bert_model_dir, params, token_pad_idx=0, tag_pad_idx=-1)
+    if args.dataset in ["conll"]:
+        bert_class = 'bert-base-cased' # auto
+        # bert_class = 'pretrained_bert_models/bert-base-cased/' # manual
+    elif args.dataset in ["msra"]:
+        bert_class = 'bert-base-chinese' # auto
+        # bert_class = 'pretrained_bert_models/bert-base-chinese/' # manual
     
+    data_loader = DataLoader(data_dir, bert_class, params, token_pad_idx=0, tag_pad_idx=-1)
+    
+    logging.info("Loading the datasets...")
+
     # Load training data and test data
     train_data = data_loader.load_data('train')
     val_data = data_loader.load_data('val')
@@ -168,15 +154,12 @@ if __name__ == '__main__':
     # Specify the training and validation dataset sizes
     params.train_size = train_data['size']
     params.val_size = val_data['size']
+    
+    logging.info("Loading BERT model...")
 
     # Prepare model
-    model = BertForSequenceTagging.from_pretrained(bert_model_dir, num_labels=len(params.tag2idx))
+    model = BertForSequenceTagging.from_pretrained(bert_class, num_labels=len(params.tag2idx))
     model.to(params.device)
-    if args.fp16:
-        model.half()
-
-    if params.n_gpu > 1 and args.multi_gpu:
-        model = torch.nn.DataParallel(model)
 
     # Prepare optimizer
     if params.full_finetuning:
@@ -192,26 +175,10 @@ if __name__ == '__main__':
         param_optimizer = list(model.classifier.named_parameters()) 
         optimizer_grouped_parameters = [{'params': [p for n, p in param_optimizer]}]
     
-    if args.fp16:
-        try:
-            from apex.optimizers import FP16_Optimizer
-            from apex.optimizers import FusedAdam
-        except ImportError:
-            raise ImportError("lease install apex from https://www.github.com/nvidia/apex to use fp16 training.")
-        optimizer = FusedAdam(optimizer_grouped_parameters,
-                              lr=params.learning_rate,
-                              bias_correction=False,
-                              max_grad_norm=1.0)
-        scheduler = LambdaLR(optimizer, lr_lambda=lambda epoch: 1/(1 + 0.05*epoch))
-        if args.loss_scale == 0:
-            optimizer = FP16_Optimizer(optimizer, dynamic_loss_scale=True)
-        else:
-            optimizer = FP16_Optimizer(optimizer, static_loss_scale=args.loss_scale)
-    else:
-        # optimizer = AdamW(model.parameters(), lr=params.learning_rate, correct_bias=False)
-        optimizer = AdamW(optimizer_grouped_parameters, lr=params.learning_rate, correct_bias=False)
-        train_steps_per_epoch = params.train_size // params.batch_size
-        scheduler = WarmupLinearSchedule(optimizer, warmup_steps=train_steps_per_epoch, t_total=params.epoch_num * train_steps_per_epoch)
+
+    optimizer = AdamW(optimizer_grouped_parameters, lr=params.learning_rate, correct_bias=False)
+    train_steps_per_epoch = params.train_size // params.batch_size
+    scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=train_steps_per_epoch, num_training_steps=params.epoch_num * train_steps_per_epoch)
 
     # Train and evaluate the model
     logging.info("Starting training for {} epoch(s)".format(params.epoch_num))
