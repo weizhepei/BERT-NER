@@ -1,7 +1,7 @@
 """split the conll dataset for our model and build tags"""
 import os
-import argparse
 import random
+import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', default='conll', help="Directory containing the dataset")
@@ -16,8 +16,12 @@ def load_dataset(path_dataset):
         for line in f:
             if line != '\n':
                 line = line.strip('\n')
-                word = line.split()[0]
-                tag = line.split()[-1]
+                if len(line.split()) > 1:
+                    word = line.split()[0]
+                    tag = line.split()[-1]
+                else:
+                    # print(line)
+                    continue
                 try:
                     if len(word) > 0 and len(tag) > 0:
                         word, tag = str(word), str(tag)
@@ -64,6 +68,7 @@ def build_tags(data_dir, tags_file):
             for line in file:
                 tag_seq = filter(len, line.strip().split(' '))
                 tags.update(list(tag_seq))
+    tags = sorted(tags)
     with open(tags_file, 'w') as file:
         file.write('\n'.join(tags))
     return tags

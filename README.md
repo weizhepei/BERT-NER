@@ -22,7 +22,7 @@ This repo was tested on Python 3.6+ and PyTorch 1.3.1. The main requirements are
 
 ## Quick Start
 
-- **Download and unzip the [Chinese](https://drive.google.com/file/d/11LkSTgnutLqLb3EYWoBvmEN19dfn7-VY/view?usp=sharing) ([English](https://drive.google.com/file/d/1qQkjxTbxgbXzmr5hbTDLVPrBws8e0EZX/view?usp=sharing)) NER model weights under `experiments/msra(conll)/`, then  run:**
+- **Download and unzip the [Chinese](https://drive.google.com/open?id=1eo4HwLrix-Zbiu5qSl29cc_3uUGKF9yZ) ([English](https://drive.google.com/open?id=1iS2Zu93ecmvxYlIrAxv0A5qG_r0o8Exy)) NER model weights under `experiments/msra(conll)/`, then  run:**
 
   ```shell
   python build_dataset_tags.py --dataset=msra
