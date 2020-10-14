@@ -46,7 +46,7 @@ class DataLoader(object):
                 tokens = line.strip().split(' ')
                 subwords = list(map(self.tokenizer.tokenize, tokens))
                 subword_lengths = list(map(len, subwords))
-                subwords = ['CLS'] + [item for indices in subwords for item in indices]
+                subwords = ['[CLS]'] + [item for indices in subwords for item in indices]
                 token_start_idxs = 1 + np.cumsum([0] + subword_lengths[:-1])
                 sentences.append((self.tokenizer.convert_tokens_to_ids(subwords),token_start_idxs))
         if tags_file != None:
